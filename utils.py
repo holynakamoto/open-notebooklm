@@ -51,7 +51,7 @@ fw_client = instructor.from_fireworks(fw_client)
 hf_client = Client(MELO_TTS_SPACES_ID)
 
 # Download and load all models for Bark
-preload_models()
+#preload_models()
 
 
 def generate_script(
