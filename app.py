@@ -1,5 +1,5 @@
 """
-main.py
+app.py
 """
 
 # Standard library imports
@@ -66,7 +66,7 @@ def generate_podcast(
     text = ""
 
     # Choose random number from 0 to 8
-    random_voice_number = random.randint(0, 8) # this is for suno model
+    random_voice_number = random.randint(0, 8)  # this is for suno model
 
     if not use_advanced_audio and language in NOT_SUPPORTED_IN_MELO_TTS:
         raise gr.Error(ERROR_MESSAGE_NOT_SUPPORTED_IN_MELO_TTS)
@@ -224,4 +224,5 @@ demo = gr.Interface(
 )
 
 if __name__ == "__main__":
-    demo.launch(show_api=UI_SHOW_API)
+    port = int(os.environ.get("PORT", 7860))
+    demo.launch(server_name="0.0.0.0", server_port=port, show_api=UI_SHOW_API)
