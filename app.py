@@ -206,7 +206,7 @@ demo = gr.Interface(
         ),
         gr.Checkbox(
             label=UI_INPUTS["advanced_audio"]["label"],
-            value=UI_INPUTS["advanced_audio"]["value"],
+            value=False,  # Explicitly set to False to avoid Bark memory usage
         ),
     ],
     outputs=[
@@ -215,7 +215,7 @@ demo = gr.Interface(
         ),
         gr.Markdown(label=UI_OUTPUTS["transcript"]["label"]),
     ],
-    allow_flagging=UI_ALLOW_FLAGGING,
+    allow_flagging=UI_ALLOW_FLAGGING,  # Note: Deprecated, consider flagging_mode="never"
     api_name=UI_API_NAME,
     theme=gr.themes.Ocean(),
     concurrency_limit=UI_CONCURRENCY_LIMIT,
