@@ -18,6 +18,7 @@ from typing import Any, Union
 # Third-party imports
 import instructor
 import requests
+import os
 from bark import SAMPLE_RATE, generate_audio, preload_models
 from fireworks.client import Fireworks
 from gradio_client import Client
@@ -39,7 +40,10 @@ from constants import (
 )
 from schema import ShortDialogue, MediumDialogue
 
-# Initialize Fireworks client, with Instructor patch
+# Initialize Fireworks client with environment variable fallback
+FIREWORKS_API_KEY = os.environ.get("FIREWORKS_API_KEY", FIREWORKS_API_KEY)
+if not FIREWORKS_API_KEY:
+    raise ValueError("FIREWORKS_API_KEY must be set in environment variables.")
 fw_client = Fireworks(api_key=FIREWORKS_API_KEY)
 fw_client = instructor.from_fireworks(fw_client)
 
@@ -56,7 +60,6 @@ def generate_script(
     output_model: Union[ShortDialogue, MediumDialogue],
 ) -> Union[ShortDialogue, MediumDialogue]:
     """Get the dialogue from the LLM."""
-
     # Call the LLM for the first time
     first_draft_dialogue = call_llm(system_prompt, input_text, output_model)
 
