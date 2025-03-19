@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y software-properties-common && \
     libsndfile1 \
     git \
     curl \
-    && echo "Installed Python version:" && python3.11 --version \
+    && python3.11 --version \
     && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 \
     && update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1 \
     && rm -rf /var/lib/apt/lists/*
@@ -42,7 +42,7 @@ RUN ls -la /app && \
 # Expose port for serverless endpoint
 EXPOSE 7860
 
-# Set environment variables (optional, can override in RunPod)
+# Set environment variables (optional default, override in RunPod UI)
 ENV PORT=7860
 
 # Run the app with Uvicorn for serverless compatibility
