@@ -24,6 +24,7 @@ from bark import SAMPLE_RATE, generate_audio, preload_models
 from fireworks.client import Fireworks
 from gradio_client import Client
 from scipy.io.wavfile import write as write_wav
+from loguru import logger  # Ensure logger is imported
 
 # Local imports
 from constants import (
@@ -64,13 +65,9 @@ def generate_script(
     output_model: Union[ShortDialogue, MediumDialogue],
 ) -> Union[ShortDialogue, MediumDialogue]:
     """Get the dialogue from the LLM."""
-    # Call the LLM for the first time
     first_draft_dialogue = call_llm(system_prompt, input_text, output_model)
-
-    # Call the LLM a second time to improve the dialogue
     system_prompt_with_dialogue = f"{system_prompt}\n\nHere is the first draft of the dialogue you provided:\n\n{first_draft_dialogue.model_dump_json()}."
     final_dialogue = call_llm(system_prompt_with_dialogue, "Please improve the dialogue. Make it more natural and engaging.", output_model)
-
     return final_dialogue
 
 
@@ -95,14 +92,14 @@ def parse_url(url: str) -> str:
         try:
             full_url = f"{JINA_READER_URL}{url}"
             response = requests.get(full_url, timeout=60)
-            response.raise_for_status()  # Raise an exception for bad status codes
+            response.raise_for_status()
             break
         except requests.RequestException as e:
-            if attempt == JINA_RETRY_ATTEMPTS - 1:  # Last attempt
+            if attempt == JINA_RETRY_ATTEMPTS - 1:
                 raise ValueError(
                     f"Failed to fetch URL after {JINA_RETRY_ATTEMPTS} attempts: {e}"
                 ) from e
-            time.sleep(JINA_RETRY_DELAY)  # Wait for X second before retrying
+            time.sleep(JINA_RETRY_DELAY)
     return response.text
 
 
@@ -118,6 +115,14 @@ def generate_podcast_audio(
 
 def _use_suno_model(text: str, speaker: str, language: str, random_voice_number: int) -> str:
     """Generate advanced audio using Bark."""
+    # Log GPU availability
+    if torch.cuda.is_available():
+        logger.info("Using GPU: %s", torch.cuda.get_device_name(0))
+        device = torch.device("cuda")
+    else:
+        logger.warning("No GPU available, using CPU. Inference might be slow.")
+        device = torch.device("cpu")
+
     host_voice_num = str(random_voice_number)
     guest_voice_num = str(random_voice_number + 1)
     audio_array = generate_audio(
@@ -143,9 +148,9 @@ def _use_melotts_api(text: str, speaker: str, language: str) -> str:
                 api_name=MELO_API_NAME,
             )
         except Exception as e:
-            if attempt == MELO_RETRY_ATTEMPTS - 1:  # Last attempt
-                raise  # Re-raise the last exception if all attempts fail
-            time.sleep(MELO_RETRY_DELAY)  # Wait for X second before retrying
+            if attempt == MELO_RETRY_ATTEMPTS - 1:
+                raise
+            time.sleep(MELO_RETRY_DELAY)
 
 
 def _get_melo_tts_params(speaker: str, language: str) -> tuple[str, float]:
@@ -155,8 +160,5 @@ def _get_melo_tts_params(speaker: str, language: str) -> tuple[str, float]:
         speed = 0.9
     else:  # host
         accent = "EN-Default" if language == "EN" else language
-        speed = (
-            1.1 if language != "EN" else 1
-        )  # if the language is not English, try speeding up so it'll sound different from the host
-        # for non-English, there is only one voice
+        speed = 1.1 if language != "EN" else 1
     return accent, speed
