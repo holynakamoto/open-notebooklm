@@ -17,6 +17,7 @@ from typing import Any, Union
 
 # Third-party imports
 import torch
+import numpy
 import instructor
 import requests
 import os
@@ -24,7 +25,7 @@ from bark import SAMPLE_RATE, generate_audio, preload_models
 from fireworks.client import Fireworks
 from gradio_client import Client
 from scipy.io.wavfile import write as write_wav
-from loguru import logger  # Ensure logger is imported
+from loguru import logger
 
 # Local imports
 from constants import (
@@ -42,8 +43,8 @@ from constants import (
 )
 from schema import ShortDialogue, MediumDialogue
 
-# Allowlist NumPy scalar for PyTorch 2.6+ weights_only=True
-torch.serialization.add_safe_globals(['numpy.core.multiarray.scalar'])
+# Allowlist NumPy scalar callable for PyTorch 2.6+ weights_only=True
+torch.serialization.add_safe_globals([numpy.core.multiarray.scalar])
 
 # Initialize Fireworks client with environment variable fallback
 FIREWORKS_API_KEY = os.environ.get("FIREWORKS_API_KEY", FIREWORKS_API_KEY)
