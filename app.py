@@ -6,6 +6,7 @@ app.py
 import glob
 import os
 import time
+import base64
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import List, Tuple, Optional
@@ -157,7 +158,7 @@ def generate_podcast(
     logger.info(f"Generated {total_characters} characters of audio")
     return temporary_file.name, transcript
 
-# FastAPI endpoint for serverless
+# FastAPI endpoint for serverless with base64 audio
 @app.post("/generate")
 async def generate_endpoint(
     files: List[str],
@@ -172,10 +173,16 @@ async def generate_endpoint(
         audio_path, transcript = generate_podcast(
             files, url, question, tone, length, language, use_advanced_audio
         )
-        # For serverless, return JSON with file path and transcript
+        # Read audio file and encode as base64
+        with open(audio_path, "rb") as audio_file:
+            audio_data = audio_file.read()
+        audio_base64 = base64.b64encode(audio_data).decode("utf-8")
+        # Clean up temporary file
+        if os.path.exists(audio_path):
+            os.remove(audio_path)
         return {
             "status": "success",
-            "audio_path": audio_path,
+            "audio_base64": audio_base64,
             "transcript": transcript
         }
     except Exception as e:
