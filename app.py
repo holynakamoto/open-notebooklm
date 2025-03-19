@@ -12,10 +12,12 @@ from typing import List, Tuple, Optional
 
 # Third-party imports
 import gradio as gr
+from fastapi import FastAPI, HTTPException
 import random
 from loguru import logger
 from pypdf import PdfReader
 from pydub import AudioSegment
+import uvicorn
 
 # Local imports
 from constants import (
@@ -51,6 +53,8 @@ from prompts import (
 from schema import ShortDialogue, MediumDialogue
 from utils import generate_podcast_audio, generate_script, parse_url
 
+# Initialize FastAPI app for serverless
+app = FastAPI()
 
 def generate_podcast(
     files: List[str],
@@ -62,25 +66,19 @@ def generate_podcast(
     use_advanced_audio: bool,
 ) -> Tuple[str, str]:
     """Generate the audio and transcript from the PDFs and/or URL."""
-
     text = ""
-
-    # Choose random number from 0 to 8
-    random_voice_number = random.randint(0, 8)  # this is for suno model
+    random_voice_number = random.randint(0, 8)  # For Suno model
 
     if not use_advanced_audio and language in NOT_SUPPORTED_IN_MELO_TTS:
         raise gr.Error(ERROR_MESSAGE_NOT_SUPPORTED_IN_MELO_TTS)
 
-    # Check if at least one input is provided
     if not files and not url:
         raise gr.Error(ERROR_MESSAGE_NO_INPUT)
 
-    # Process PDFs if any
     if files:
         for file in files:
             if not file.lower().endswith(".pdf"):
                 raise gr.Error(ERROR_MESSAGE_NOT_PDF)
-
             try:
                 with Path(file).open("rb") as f:
                     reader = PdfReader(f)
@@ -88,7 +86,6 @@ def generate_podcast(
             except Exception as e:
                 raise gr.Error(f"{ERROR_MESSAGE_READING_PDF}: {str(e)}")
 
-    # Process URL if provided
     if url:
         try:
             url_text = parse_url(url)
@@ -96,13 +93,10 @@ def generate_podcast(
         except ValueError as e:
             raise gr.Error(str(e))
 
-    # Check total character count
     if len(text) > CHARACTER_LIMIT:
         raise gr.Error(ERROR_MESSAGE_TOO_LONG)
 
-    # Modify the system prompt based on the user input
     modified_system_prompt = SYSTEM_PROMPT
-
     if question:
         modified_system_prompt += f"\n\n{QUESTION_MODIFIER} {question}"
     if tone:
@@ -112,7 +106,6 @@ def generate_podcast(
     if language:
         modified_system_prompt += f"\n\n{LANGUAGE_MODIFIER} {language}."
 
-    # Call the LLM
     if length == "Short (1-2 min)":
         llm_output = generate_script(modified_system_prompt, text, ShortDialogue)
     else:
@@ -120,7 +113,6 @@ def generate_podcast(
 
     logger.info(f"Generated dialogue: {llm_output}")
 
-    # Process the dialogue
     audio_segments = []
     transcript = ""
     total_characters = 0
@@ -135,22 +127,16 @@ def generate_podcast(
         total_characters += len(line.text)
 
         language_for_tts = SUNO_LANGUAGE_MAPPING[language]
-
         if not use_advanced_audio:
             language_for_tts = MELO_TTS_LANGUAGE_MAPPING[language_for_tts]
 
-        # Get audio file path
         audio_file_path = generate_podcast_audio(
             line.text, line.speaker, language_for_tts, use_advanced_audio, random_voice_number
         )
-        # Read the audio file into an AudioSegment
         audio_segment = AudioSegment.from_file(audio_file_path)
         audio_segments.append(audio_segment)
 
-    # Concatenate all audio segments
     combined_audio = sum(audio_segments)
-
-    # Export the combined audio to a temporary file
     temporary_directory = GRADIO_CACHE_DIR
     os.makedirs(temporary_directory, exist_ok=True)
 
@@ -161,7 +147,6 @@ def generate_podcast(
     )
     combined_audio.export(temporary_file.name, format="mp3")
 
-    # Delete any files in the temp directory that end with .mp3 and are over a day old
     for file in glob.glob(f"{temporary_directory}*.mp3"):
         if (
             os.path.isfile(file)
@@ -170,52 +155,76 @@ def generate_podcast(
             os.remove(file)
 
     logger.info(f"Generated {total_characters} characters of audio")
-
     return temporary_file.name, transcript
 
+# FastAPI endpoint for serverless
+@app.post("/generate")
+async def generate_endpoint(
+    files: List[str],
+    url: Optional[str] = None,
+    question: Optional[str] = None,
+    tone: Optional[str] = None,
+    length: Optional[str] = None,
+    language: str = "EN",
+    use_advanced_audio: bool = False
+):
+    try:
+        audio_path, transcript = generate_podcast(
+            files, url, question, tone, length, language, use_advanced_audio
+        )
+        # For serverless, return JSON with file path and transcript
+        return {
+            "status": "success",
+            "audio_path": audio_path,
+            "transcript": transcript
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
+# Gradio interface for local testing
 demo = gr.Interface(
     title=APP_TITLE,
     description=UI_DESCRIPTION,
     fn=generate_podcast,
     inputs=[
         gr.File(
-            label=UI_INPUTS["file_upload"]["label"],  # Step 1: File upload
+            label=UI_INPUTS["file_upload"]["label"],
             file_types=UI_INPUTS["file_upload"]["file_types"],
             file_count=UI_INPUTS["file_upload"]["file_count"],
         ),
         gr.Textbox(
-            label=UI_INPUTS["url"]["label"],  # Step 2: URL
+            label=UI_INPUTS["url"]["label"],
             placeholder=UI_INPUTS["url"]["placeholder"],
         ),
-        gr.Textbox(label=UI_INPUTS["question"]["label"]),  # Step 3: Question
+        gr.Textbox(label=UI_INPUTS["question"]["label"]),
         gr.Dropdown(
-            label=UI_INPUTS["tone"]["label"],  # Step 4: Tone
+            label=UI_INPUTS["tone"]["label"],
             choices=UI_INPUTS["tone"]["choices"],
             value=UI_INPUTS["tone"]["value"],
         ),
         gr.Dropdown(
-            label=UI_INPUTS["length"]["label"],  # Step 5: Length
+            label=UI_INPUTS["length"]["label"],
             choices=UI_INPUTS["length"]["choices"],
             value=UI_INPUTS["length"]["value"],
         ),
         gr.Dropdown(
-            choices=UI_INPUTS["language"]["choices"],  # Step 6: Language
+            choices=UI_INPUTS["language"]["choices"],
             value=UI_INPUTS["language"]["value"],
             label=UI_INPUTS["language"]["label"],
         ),
         gr.Checkbox(
             label=UI_INPUTS["advanced_audio"]["label"],
-            value=False,  # Explicitly set to False to avoid Bark memory usage
+            value=False,
         ),
     ],
     outputs=[
         gr.Audio(
-            label=UI_OUTPUTS["audio"]["label"], format=UI_OUTPUTS["audio"]["format"]
+            label=UI_OUTPUTS["audio"]["label"],
+            format=UI_OUTPUTS["audio"]["format"]
         ),
         gr.Markdown(label=UI_OUTPUTS["transcript"]["label"]),
     ],
-    allow_flagging=UI_ALLOW_FLAGGING,  # Note: Deprecated, consider flagging_mode="never"
+    allow_flagging=UI_ALLOW_FLAGGING,
     api_name=UI_API_NAME,
     theme=gr.themes.Ocean(),
     concurrency_limit=UI_CONCURRENCY_LIMIT,
@@ -224,5 +233,7 @@ demo = gr.Interface(
 )
 
 if __name__ == "__main__":
+    # For local testing, run Gradio
     port = int(os.environ.get("PORT", 7860))
     demo.launch(server_name="0.0.0.0", server_port=port, show_api=UI_SHOW_API)
+    # For serverless, FastAPI runs via CMD in Dockerfile
