@@ -1,26 +1,20 @@
-"""
-app.py
-"""
-
-# Standard library imports
+# app.py
+import base64
 import glob
 import os
 import time
-import base64
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import List, Tuple, Optional
 
-# Third-party imports
+from modal import App, Image, Secret, web_endpoint
 import gradio as gr
-from fastapi import FastAPI, HTTPException
-import random
 from loguru import logger
 from pypdf import PdfReader
 from pydub import AudioSegment
-import uvicorn
+import random
 
-# Local imports
+# Local imports (ensure these files are in your repo)
 from constants import (
     APP_TITLE,
     CHARACTER_LIMIT,
@@ -54,13 +48,11 @@ from prompts import (
 from schema import ShortDialogue, MediumDialogue
 from utils import generate_podcast_audio, generate_script, parse_url
 
-# Initialize FastAPI app for serverless
-app = FastAPI()
-
-# Add startup logging
-@app.on_event("startup")
-async def startup_event():
-    logger.info("FastAPI application starting up")
+# Modal app setup
+app = App("open-notebooklm")
+image = Image.debian_slim(python_version="3.11") \
+    .pip_install_from_requirements("requirements.txt") \
+    .apt_install("ffmpeg", "libsndfile1")
 
 def generate_podcast(
     files: List[str],
@@ -71,10 +63,9 @@ def generate_podcast(
     language: str,
     use_advanced_audio: bool,
 ) -> Tuple[str, str]:
-    """Generate the audio and transcript from the PDFs and/or URL."""
     logger.info("Starting podcast generation: files=%s, url=%s, language=%s", files, url, language)
     text = ""
-    random_voice_number = random.randint(0, 8)  # For Suno model
+    random_voice_number = random.randint(0, 8)
 
     if not use_advanced_audio and language in NOT_SUPPORTED_IN_MELO_TTS:
         logger.error("Unsupported language for Melo TTS: %s", language)
@@ -181,21 +172,19 @@ def generate_podcast(
     logger.info("Podcast generation completed: %d characters of audio", total_characters)
     return temporary_file.name, transcript
 
-# FastAPI endpoint for serverless with base64 audio and debug logging
-@app.post("/generate")
-async def generate_endpoint(
-    files: List[str],
-    url: Optional[str] = None,
-    question: Optional[str] = None,
-    tone: Optional[str] = None,
-    length: Optional[str] = None,
-    language: str = "EN",
-    use_advanced_audio: bool = False
-):
-    logger.info("Received /generate request: files=%s, url=%s, language=%s", files, url, language)
+@app.function(image=image, gpu="A100", secrets=[Secret.from_name("FIREWORKS_API_KEY")])
+@web_endpoint(method="POST")
+async def generate(request: dict):
+    logger.info("Received request: %s", request)
     try:
         audio_path, transcript = generate_podcast(
-            files, url, question, tone, length, language, use_advanced_audio
+            request.get("files", []),
+            request.get("url"),
+            request.get("question"),
+            request.get("tone"),
+            request.get("length"),
+            request.get("language", "EN"),
+            request.get("use_advanced_audio", False)
         )
         logger.debug("Reading audio file: %s", audio_path)
         with open(audio_path, "rb") as audio_file:
@@ -213,62 +202,4 @@ async def generate_endpoint(
         }
     except Exception as e:
         logger.error("Request failed: %s", str(e))
-        raise HTTPException(status_code=500, detail=str(e))
-
-# Gradio interface for local testing
-demo = gr.Interface(
-    title=APP_TITLE,
-    description=UI_DESCRIPTION,
-    fn=generate_podcast,
-    inputs=[
-        gr.File(
-            label=UI_INPUTS["file_upload"]["label"],
-            file_types=UI_INPUTS["file_upload"]["file_types"],
-            file_count=UI_INPUTS["file_upload"]["file_count"],
-        ),
-        gr.Textbox(
-            label=UI_INPUTS["url"]["label"],
-            placeholder=UI_INPUTS["url"]["placeholder"],
-        ),
-        gr.Textbox(label=UI_INPUTS["question"]["label"]),
-        gr.Dropdown(
-            label=UI_INPUTS["tone"]["label"],
-            choices=UI_INPUTS["tone"]["choices"],
-            value=UI_INPUTS["tone"]["value"],
-        ),
-        gr.Dropdown(
-            label=UI_INPUTS["length"]["label"],
-            choices=UI_INPUTS["length"]["choices"],
-            value=UI_INPUTS["length"]["value"],
-        ),
-        gr.Dropdown(
-            choices=UI_INPUTS["language"]["choices"],
-            value=UI_INPUTS["language"]["value"],
-            label=UI_INPUTS["language"]["label"],
-        ),
-        gr.Checkbox(
-            label=UI_INPUTS["advanced_audio"]["label"],
-            value=False,
-        ),
-    ],
-    outputs=[
-        gr.Audio(
-            label=UI_OUTPUTS["audio"]["label"],
-            format=UI_OUTPUTS["audio"]["format"]
-        ),
-        gr.Markdown(label=UI_OUTPUTS["transcript"]["label"]),
-    ],
-    flagging_mode="never",  # Updated from allow_flagging
-    api_name=UI_API_NAME,
-    theme=gr.themes.Ocean(),
-    concurrency_limit=UI_CONCURRENCY_LIMIT,
-    examples=UI_EXAMPLES,
-    cache_examples=UI_CACHE_EXAMPLES,
-)
-
-if __name__ == "__main__":
-    # For local testing, run Gradio
-    port = int(os.environ.get("PORT", 7860))
-    logger.info("Starting Gradio interface on port %d", port)
-    demo.launch(server_name="0.0.0.0", server_port=port, show_api=UI_SHOW_API)
-    # For serverless, FastAPI runs via CMD in Dockerfile
+        raise Exception(str(e))
