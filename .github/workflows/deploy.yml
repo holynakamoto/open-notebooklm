@@ -1,0 +1,33 @@
+name: Deploy to Modal
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Modal CLI
+        run: pip install modal
+
+      - name: Configure Modal Token
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        run: |
+          echo "[default]" > ~/.modal.toml
+          echo "token_id = \"$MODAL_TOKEN_ID\"" >> ~/.modal.toml
+          echo "token_secret = \"$MODAL_TOKEN_SECRET\"" >> ~/.modal.toml
+
+      - name: Deploy to Modal
+        run: modal deploy app.py
