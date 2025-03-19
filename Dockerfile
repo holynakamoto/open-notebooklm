@@ -4,7 +4,7 @@ FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu20.04
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies (add DeadSnakes PPA for Python 3.11 and curl)
+# Install system dependencies (add DeadSnakes PPA for Python 3.11 and required tools)
 RUN apt-get update && apt-get install -y software-properties-common && \
     add-apt-repository ppa:deadsnakes/ppa && \
     apt-get update && apt-get install -y \
@@ -15,18 +15,21 @@ RUN apt-get update && apt-get install -y software-properties-common && \
     libsndfile1 \
     git \
     curl \
-    && python3.11 --version \
+    && echo "Installed Python version:" && python3.11 --version \
     && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 \
     && update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Ensure pip is installed and upgraded for Python 3.11
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11 && \
-    python3.11 -m pip install --upgrade pip
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py -o get-pip.py && \
+    python3.11 get-pip.py && \
+    python3.11 -m pip install --upgrade pip && \
+    rm get-pip.py
 
 # Copy requirements file and install Python dependencies, including FastAPI and Uvicorn
 COPY requirements.txt .
-RUN python3.11 -m pip install --no-cache-dir -r requirements.txt fastapi uvicorn
+RUN python3.11 -m pip install --no-cache-dir -r requirements.txt fastapi uvicorn && \
+    echo "Installed Python packages:" && python3.11 -m pip list
 
 # Copy the entire project
 COPY . .
