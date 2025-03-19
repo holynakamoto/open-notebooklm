@@ -228,9 +228,9 @@ demo = gr.Interface(
         ),
         gr.Markdown(label=UI_OUTPUTS["transcript"]["label"]),
     ],
-    flagging_mode="never",
+    allow_flagging="never",  # Updated from flagging_mode
     api_name=UI_API_NAME,
-    theme=gr.themes.Default(),  # Updated from Ocean
+    theme=gr.themes.Default(),
     concurrency_limit=UI_CONCURRENCY_LIMIT,
     examples=UI_EXAMPLES,
     cache_examples=UI_CACHE_EXAMPLES,
