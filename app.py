@@ -7,14 +7,13 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import List, Tuple, Optional
 
-from modal import App, Image, Secret, fastapi_endpoint  # Updated import
+from modal import App, Image, Secret, fastapi_endpoint
 import gradio as gr
 from loguru import logger
 from pypdf import PdfReader
 from pydub import AudioSegment
 import random
 
-# Local imports
 from constants import (
     APP_TITLE, CHARACTER_LIMIT, ERROR_MESSAGE_NOT_PDF, ERROR_MESSAGE_NO_INPUT,
     ERROR_MESSAGE_NOT_SUPPORTED_IN_MELO_TTS, ERROR_MESSAGE_READING_PDF,
@@ -29,13 +28,12 @@ from prompts import (
 from schema import ShortDialogue, MediumDialogue
 from utils import generate_podcast_audio, generate_script, parse_url
 
-# Modal app setup
 app = App("open-notebooklm")
 image = Image.debian_slim(python_version="3.11") \
     .pip_install_from_requirements("requirements.txt") \
     .apt_install("ffmpeg", "libsndfile1") \
     .pip_install("modal") \
-    .add_local_python_source("constants", "prompts", "schema", "utils")  # Explicitly add local modules
+    .add_local_python_source("constants", "prompts", "schema", "utils")
 
 def generate_podcast(
     files: List[str],
@@ -156,7 +154,7 @@ def generate_podcast(
     return temporary_file.name, transcript
 
 @app.function(image=image, gpu="A100", secrets=[Secret.from_name("FIREWORKS_API_KEY")])
-@fastapi_endpoint(method="POST")  # Updated from web_endpoint
+@fastapi_endpoint(method="POST")
 async def generate(request: dict):
     logger.info("Received request: %s", request)
     try:
@@ -232,7 +230,7 @@ demo = gr.Interface(
     ],
     flagging_mode="never",
     api_name=UI_API_NAME,
-    theme=gr.themes.Ocean(),
+    theme=gr.themes.Default(),  # Updated from Ocean
     concurrency_limit=UI_CONCURRENCY_LIMIT,
     examples=UI_EXAMPLES,
     cache_examples=UI_CACHE_EXAMPLES,
