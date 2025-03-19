@@ -1,5 +1,5 @@
 # Core dependencies for app.py
-gradio==4.44.1  # Updated from 5.0.1
+gradio==4.44.1
 fastapi==0.115.0
 pypdf==4.1.0
 pydub==0.25.1
@@ -29,7 +29,7 @@ markdown-it-py==3.0.0
 MarkupSafe==2.1.5
 mdurl==0.1.2
 multidict==6.1.0
-numpy==2.1.1
+numpy==2.0.2  # Updated from 2.1.1
 openai==1.50.2
 orjson==3.10.7
 packaging==24.1
