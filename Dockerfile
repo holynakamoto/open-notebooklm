@@ -9,21 +9,20 @@ RUN apt-get update && apt-get install -y software-properties-common && \
     add-apt-repository ppa:deadsnakes/ppa && \
     apt-get update && apt-get install -y \
     python3.11 \
-    python3.11-distutils \
-    python3-pip \
+    python3.11-dev \
+    python3.11-venv \
     ffmpeg \
     libsndfile1 \
     git \
-    && ln -s /usr/bin/python3.11 /usr/bin/python \
     && rm -rf /var/lib/apt/lists/*
 
-# Install pip for Python 3.11
-RUN python3.11 -m ensurepip && \
+# Ensure pip is installed and upgraded for Python 3.11
+RUN python3.11 -m ensurepip --upgrade && \
     python3.11 -m pip install --upgrade pip
 
 # Copy requirements file and install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN python3.11 -m pip install --no-cache-dir -r requirements.txt
 
 # Copy the entire project
 COPY . .
@@ -35,4 +34,4 @@ EXPOSE 7860
 ENV PORT=7860
 
 # Run the app
-CMD ["python", "app.py"]
+CMD ["python3.11", "app.py"]
