@@ -57,6 +57,11 @@ from utils import generate_podcast_audio, generate_script, parse_url
 # Initialize FastAPI app for serverless
 app = FastAPI()
 
+# Add startup logging
+@app.on_event("startup")
+async def startup_event():
+    logger.info("FastAPI application starting up")
+
 def generate_podcast(
     files: List[str],
     url: Optional[str],
@@ -67,34 +72,46 @@ def generate_podcast(
     use_advanced_audio: bool,
 ) -> Tuple[str, str]:
     """Generate the audio and transcript from the PDFs and/or URL."""
+    logger.info("Starting podcast generation: files=%s, url=%s, language=%s", files, url, language)
     text = ""
     random_voice_number = random.randint(0, 8)  # For Suno model
 
     if not use_advanced_audio and language in NOT_SUPPORTED_IN_MELO_TTS:
+        logger.error("Unsupported language for Melo TTS: %s", language)
         raise gr.Error(ERROR_MESSAGE_NOT_SUPPORTED_IN_MELO_TTS)
 
     if not files and not url:
+        logger.error("No input provided")
         raise gr.Error(ERROR_MESSAGE_NO_INPUT)
 
     if files:
+        logger.info("Processing %d files", len(files))
         for file in files:
             if not file.lower().endswith(".pdf"):
+                logger.error("Invalid file type: %s", file)
                 raise gr.Error(ERROR_MESSAGE_NOT_PDF)
             try:
                 with Path(file).open("rb") as f:
                     reader = PdfReader(f)
-                    text += "\n\n".join([page.extract_text() for page in reader.pages])
+                    extracted_text = "\n\n".join([page.extract_text() for page in reader.pages])
+                    text += extracted_text
+                    logger.debug("Extracted text from %s: %s chars", file, len(extracted_text))
             except Exception as e:
+                logger.error("Failed to read PDF %s: %s", file, str(e))
                 raise gr.Error(f"{ERROR_MESSAGE_READING_PDF}: {str(e)}")
 
     if url:
+        logger.info("Processing URL: %s", url)
         try:
             url_text = parse_url(url)
             text += "\n\n" + url_text
+            logger.debug("Extracted text from URL: %s chars", len(url_text))
         except ValueError as e:
+            logger.error("Failed to parse URL %s: %s", url, str(e))
             raise gr.Error(str(e))
 
     if len(text) > CHARACTER_LIMIT:
+        logger.error("Text exceeds character limit: %d > %d", len(text), CHARACTER_LIMIT)
         raise gr.Error(ERROR_MESSAGE_TOO_LONG)
 
     modified_system_prompt = SYSTEM_PROMPT
@@ -107,19 +124,21 @@ def generate_podcast(
     if language:
         modified_system_prompt += f"\n\n{LANGUAGE_MODIFIER} {language}."
 
+    logger.debug("Modified system prompt: %s", modified_system_prompt[:100] + "..." if len(modified_system_prompt) > 100 else modified_system_prompt)
+
     if length == "Short (1-2 min)":
         llm_output = generate_script(modified_system_prompt, text, ShortDialogue)
     else:
         llm_output = generate_script(modified_system_prompt, text, MediumDialogue)
 
-    logger.info(f"Generated dialogue: {llm_output}")
+    logger.info("Generated dialogue: %s", llm_output)
 
     audio_segments = []
     transcript = ""
     total_characters = 0
 
     for line in llm_output.dialogue:
-        logger.info(f"Generating audio for {line.speaker}: {line.text}")
+        logger.info("Generating audio for %s: %s", line.speaker, line.text[:50] + "..." if len(line.text) > 50 else line.text)
         if line.speaker == "Host (Jane)":
             speaker = f"**Host**: {line.text}"
         else:
@@ -134,9 +153,11 @@ def generate_podcast(
         audio_file_path = generate_podcast_audio(
             line.text, line.speaker, language_for_tts, use_advanced_audio, random_voice_number
         )
+        logger.debug("Generated audio file: %s", audio_file_path)
         audio_segment = AudioSegment.from_file(audio_file_path)
         audio_segments.append(audio_segment)
 
+    logger.info("Combining %d audio segments", len(audio_segments))
     combined_audio = sum(audio_segments)
     temporary_directory = GRADIO_CACHE_DIR
     os.makedirs(temporary_directory, exist_ok=True)
@@ -147,18 +168,20 @@ def generate_podcast(
         suffix=".mp3",
     )
     combined_audio.export(temporary_file.name, format="mp3")
+    logger.debug("Exported combined audio to: %s", temporary_file.name)
 
     for file in glob.glob(f"{temporary_directory}*.mp3"):
         if (
             os.path.isfile(file)
             and time.time() - os.path.getmtime(file) > GRADIO_CLEAR_CACHE_OLDER_THAN
         ):
+            logger.debug("Removing old audio file: %s", file)
             os.remove(file)
 
-    logger.info(f"Generated {total_characters} characters of audio")
+    logger.info("Podcast generation completed: %d characters of audio", total_characters)
     return temporary_file.name, transcript
 
-# FastAPI endpoint for serverless with base64 audio
+# FastAPI endpoint for serverless with base64 audio and debug logging
 @app.post("/generate")
 async def generate_endpoint(
     files: List[str],
@@ -169,23 +192,27 @@ async def generate_endpoint(
     language: str = "EN",
     use_advanced_audio: bool = False
 ):
+    logger.info("Received /generate request: files=%s, url=%s, language=%s", files, url, language)
     try:
         audio_path, transcript = generate_podcast(
             files, url, question, tone, length, language, use_advanced_audio
         )
-        # Read audio file and encode as base64
+        logger.debug("Reading audio file: %s", audio_path)
         with open(audio_path, "rb") as audio_file:
             audio_data = audio_file.read()
         audio_base64 = base64.b64encode(audio_data).decode("utf-8")
-        # Clean up temporary file
+        logger.debug("Encoded audio to base64: %d bytes", len(audio_base64))
         if os.path.exists(audio_path):
+            logger.debug("Removing temporary audio file: %s", audio_path)
             os.remove(audio_path)
+        logger.info("Request completed successfully")
         return {
             "status": "success",
             "audio_base64": audio_base64,
             "transcript": transcript
         }
     except Exception as e:
+        logger.error("Request failed: %s", str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 # Gradio interface for local testing
@@ -231,7 +258,7 @@ demo = gr.Interface(
         ),
         gr.Markdown(label=UI_OUTPUTS["transcript"]["label"]),
     ],
-    flagging_mode="never",
+    flagging_mode="never",  # Updated from allow_flagging
     api_name=UI_API_NAME,
     theme=gr.themes.Ocean(),
     concurrency_limit=UI_CONCURRENCY_LIMIT,
@@ -242,5 +269,6 @@ demo = gr.Interface(
 if __name__ == "__main__":
     # For local testing, run Gradio
     port = int(os.environ.get("PORT", 7860))
+    logger.info("Starting Gradio interface on port %d", port)
     demo.launch(server_name="0.0.0.0", server_port=port, show_api=UI_SHOW_API)
     # For serverless, FastAPI runs via CMD in Dockerfile
