@@ -43,7 +43,7 @@ from constants import (
 )
 from schema import ShortDialogue, MediumDialogue
 
-# Allowlist NumPy scalar for PyTorch 2.6+ weights_only=True
+# Allowlist NumPy scalar callable for PyTorch 2.6+ weights_only=True
 torch.serialization.add_safe_globals([numpy.core.multiarray.scalar])
 
 # Initialize Fireworks client with environment variable fallback
@@ -61,8 +61,12 @@ def preload_bark_models():
     """Preload Bark models with GPU support if available."""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info("Preloading Bark models on device: %s", device)
-    preload_models()
-    logger.info("Bark models preloaded successfully")
+    try:
+        preload_models()
+        logger.info("Bark models preloaded successfully")
+    except Exception as e:
+        logger.error("Failed to preload Bark models: %s", str(e))
+        raise
 
 # Uncomment to preload models at startup if desired
 # preload_bark_models()
