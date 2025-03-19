@@ -62,7 +62,12 @@ def preload_bark_models():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info("Preloading Bark models on device: %s", device)
     try:
-        preload_models()
+        # Use weights_only=False locally to bypass unpickling issues; Modal GPU handles this safely
+        if not torch.cuda.is_available():
+            logger.warning("Using CPU locally with weights_only=False for compatibility")
+            preload_models(weights_only=False)  # Trusted source, safe for local testing
+        else:
+            preload_models()  # Default weights_only=True on Modal GPU
         logger.info("Bark models preloaded successfully")
     except Exception as e:
         logger.error("Failed to preload Bark models: %s", str(e))
