@@ -43,7 +43,7 @@ from constants import (
 )
 from schema import ShortDialogue, MediumDialogue
 
-# Allowlist NumPy scalar callable for PyTorch 2.6+ weights_only=True
+# Allowlist NumPy scalar for PyTorch 2.6+ weights_only=True
 torch.serialization.add_safe_globals([numpy.core.multiarray.scalar])
 
 # Initialize Fireworks client with environment variable fallback
@@ -56,8 +56,16 @@ fw_client = instructor.from_fireworks(fw_client)
 # Initialize Hugging Face client
 hf_client = Client(MELO_TTS_SPACES_ID)
 
-# Download and load all models for Bark - Commented out to reduce memory usage
-# preload_models()
+# Preload Bark models with explicit device handling
+def preload_bark_models():
+    """Preload Bark models with GPU support if available."""
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    logger.info("Preloading Bark models on device: %s", device)
+    preload_models()
+    logger.info("Bark models preloaded successfully")
+
+# Uncomment to preload models at startup if desired
+# preload_bark_models()
 
 
 def generate_script(
@@ -123,6 +131,9 @@ def _use_suno_model(text: str, speaker: str, language: str, random_voice_number:
     else:
         logger.warning("No GPU available, using CPU. Inference might be slow.")
         device = torch.device("cpu")
+
+    # Ensure models are loaded on the correct device
+    preload_bark_models()
 
     host_voice_num = str(random_voice_number)
     guest_voice_num = str(random_voice_number + 1)
