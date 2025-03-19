@@ -4,7 +4,7 @@ FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu20.04
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies (add DeadSnakes PPA for Python 3.11)
+# Install system dependencies (add DeadSnakes PPA for Python 3.11 and curl)
 RUN apt-get update && apt-get install -y software-properties-common && \
     add-apt-repository ppa:deadsnakes/ppa && \
     apt-get update && apt-get install -y \
@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y software-properties-common && \
     ffmpeg \
     libsndfile1 \
     git \
+    curl \
     && python3.11 --version \
     && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 \
     && update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1 \
