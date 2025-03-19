@@ -7,43 +7,24 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import List, Tuple, Optional
 
-from modal import App, Image, Secret, web_endpoint
+from modal import App, Image, Secret, fastapi_endpoint  # Updated import
 import gradio as gr
 from loguru import logger
 from pypdf import PdfReader
 from pydub import AudioSegment
 import random
 
-# Local imports (ensure these files are in your repo)
+# Local imports
 from constants import (
-    APP_TITLE,
-    CHARACTER_LIMIT,
-    ERROR_MESSAGE_NOT_PDF,
-    ERROR_MESSAGE_NO_INPUT,
-    ERROR_MESSAGE_NOT_SUPPORTED_IN_MELO_TTS,
-    ERROR_MESSAGE_READING_PDF,
-    ERROR_MESSAGE_TOO_LONG,
-    GRADIO_CACHE_DIR,
-    GRADIO_CLEAR_CACHE_OLDER_THAN,
-    MELO_TTS_LANGUAGE_MAPPING,
-    NOT_SUPPORTED_IN_MELO_TTS,
-    SUNO_LANGUAGE_MAPPING,
-    UI_ALLOW_FLAGGING,
-    UI_API_NAME,
-    UI_CACHE_EXAMPLES,
-    UI_CONCURRENCY_LIMIT,
-    UI_DESCRIPTION,
-    UI_EXAMPLES,
-    UI_INPUTS,
-    UI_OUTPUTS,
-    UI_SHOW_API,
+    APP_TITLE, CHARACTER_LIMIT, ERROR_MESSAGE_NOT_PDF, ERROR_MESSAGE_NO_INPUT,
+    ERROR_MESSAGE_NOT_SUPPORTED_IN_MELO_TTS, ERROR_MESSAGE_READING_PDF,
+    ERROR_MESSAGE_TOO_LONG, GRADIO_CACHE_DIR, GRADIO_CLEAR_CACHE_OLDER_THAN,
+    MELO_TTS_LANGUAGE_MAPPING, NOT_SUPPORTED_IN_MELO_TTS, SUNO_LANGUAGE_MAPPING,
+    UI_ALLOW_FLAGGING, UI_API_NAME, UI_CACHE_EXAMPLES, UI_CONCURRENCY_LIMIT,
+    UI_DESCRIPTION, UI_EXAMPLES, UI_INPUTS, UI_OUTPUTS, UI_SHOW_API
 )
 from prompts import (
-    LANGUAGE_MODIFIER,
-    LENGTH_MODIFIERS,
-    QUESTION_MODIFIER,
-    SYSTEM_PROMPT,
-    TONE_MODIFIER,
+    LANGUAGE_MODIFIER, LENGTH_MODIFIERS, QUESTION_MODIFIER, SYSTEM_PROMPT, TONE_MODIFIER
 )
 from schema import ShortDialogue, MediumDialogue
 from utils import generate_podcast_audio, generate_script, parse_url
@@ -52,7 +33,9 @@ from utils import generate_podcast_audio, generate_script, parse_url
 app = App("open-notebooklm")
 image = Image.debian_slim(python_version="3.11") \
     .pip_install_from_requirements("requirements.txt") \
-    .apt_install("ffmpeg", "libsndfile1")
+    .apt_install("ffmpeg", "libsndfile1") \
+    .pip_install("modal") \
+    .add_local_python_source("constants", "prompts", "schema", "utils")  # Explicitly add local modules
 
 def generate_podcast(
     files: List[str],
@@ -173,7 +156,7 @@ def generate_podcast(
     return temporary_file.name, transcript
 
 @app.function(image=image, gpu="A100", secrets=[Secret.from_name("FIREWORKS_API_KEY")])
-@web_endpoint(method="POST")
+@fastapi_endpoint(method="POST")  # Updated from web_endpoint
 async def generate(request: dict):
     logger.info("Received request: %s", request)
     try:
@@ -203,3 +186,59 @@ async def generate(request: dict):
     except Exception as e:
         logger.error("Request failed: %s", str(e))
         raise Exception(str(e))
+
+# Gradio interface for local testing
+demo = gr.Interface(
+    title=APP_TITLE,
+    description=UI_DESCRIPTION,
+    fn=generate_podcast,
+    inputs=[
+        gr.File(
+            label=UI_INPUTS["file_upload"]["label"],
+            file_types=UI_INPUTS["file_upload"]["file_types"],
+            file_count=UI_INPUTS["file_upload"]["file_count"],
+        ),
+        gr.Textbox(
+            label=UI_INPUTS["url"]["label"],
+            placeholder=UI_INPUTS["url"]["placeholder"],
+        ),
+        gr.Textbox(label=UI_INPUTS["question"]["label"]),
+        gr.Dropdown(
+            label=UI_INPUTS["tone"]["label"],
+            choices=UI_INPUTS["tone"]["choices"],
+            value=UI_INPUTS["tone"]["value"],
+        ),
+        gr.Dropdown(
+            label=UI_INPUTS["length"]["label"],
+            choices=UI_INPUTS["length"]["choices"],
+            value=UI_INPUTS["length"]["value"],
+        ),
+        gr.Dropdown(
+            choices=UI_INPUTS["language"]["choices"],
+            value=UI_INPUTS["language"]["value"],
+            label=UI_INPUTS["language"]["label"],
+        ),
+        gr.Checkbox(
+            label=UI_INPUTS["advanced_audio"]["label"],
+            value=False,
+        ),
+    ],
+    outputs=[
+        gr.Audio(
+            label=UI_OUTPUTS["audio"]["label"],
+            format=UI_OUTPUTS["audio"]["format"]
+        ),
+        gr.Markdown(label=UI_OUTPUTS["transcript"]["label"]),
+    ],
+    flagging_mode="never",
+    api_name=UI_API_NAME,
+    theme=gr.themes.Ocean(),
+    concurrency_limit=UI_CONCURRENCY_LIMIT,
+    examples=UI_EXAMPLES,
+    cache_examples=UI_CACHE_EXAMPLES,
+)
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 7860))
+    logger.info("Starting Gradio interface on port %d", port)
+    demo.launch(server_name="0.0.0.0", server_port=port, show_api=UI_SHOW_API)
