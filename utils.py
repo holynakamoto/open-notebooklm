@@ -50,8 +50,8 @@ fw_client = instructor.from_fireworks(fw_client)
 # Initialize Hugging Face client
 hf_client = Client(MELO_TTS_SPACES_ID)
 
-# Download and load all models for Bark
-#preload_models()
+# Download and load all models for Bark - Commented out to reduce memory usage
+# preload_models()
 
 
 def generate_script(
