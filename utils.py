@@ -16,6 +16,7 @@ import time
 from typing import Any, Union
 
 # Third-party imports
+import torch
 import instructor
 import requests
 import os
@@ -39,6 +40,9 @@ from constants import (
     JINA_RETRY_DELAY,
 )
 from schema import ShortDialogue, MediumDialogue
+
+# Allowlist NumPy scalar for PyTorch 2.6+ weights_only=True
+torch.serialization.add_safe_globals(['numpy.core.multiarray.scalar'])
 
 # Initialize Fireworks client with environment variable fallback
 FIREWORKS_API_KEY = os.environ.get("FIREWORKS_API_KEY", FIREWORKS_API_KEY)
