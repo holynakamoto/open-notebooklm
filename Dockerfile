@@ -4,15 +4,22 @@ FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu20.04
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies (Python, audio libs, etc.)
-RUN apt-get update && apt-get install -y \
+# Install system dependencies (add DeadSnakes PPA for Python 3.11)
+RUN apt-get update && apt-get install -y software-properties-common && \
+    add-apt-repository ppa:deadsnakes/ppa && \
+    apt-get update && apt-get install -y \
     python3.11 \
+    python3.11-distutils \
     python3-pip \
     ffmpeg \
     libsndfile1 \
     git \
     && ln -s /usr/bin/python3.11 /usr/bin/python \
     && rm -rf /var/lib/apt/lists/*
+
+# Install pip for Python 3.11
+RUN python3.11 -m ensurepip && \
+    python3.11 -m pip install --upgrade pip
 
 # Copy requirements file and install Python dependencies
 COPY requirements.txt .
