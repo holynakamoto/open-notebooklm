@@ -60,17 +60,14 @@ hf_client = Client(MELO_TTS_SPACES_ID)
 def preload_bark_models():
     """Preload Bark models with GPU support if available."""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    logger.info("Preloading Bark models on device: %s", device)
+    logger.info(f"Preloading Bark models on device: {device}")
     try:
-        # Use weights_only=False locally to bypass unpickling issues; Modal GPU handles this safely
-        if not torch.cuda.is_available():
-            logger.warning("Using CPU locally with weights_only=False for compatibility")
-            preload_models(weights_only=False)  # Trusted source, safe for local testing
-        else:
-            preload_models()  # Default weights_only=True on Modal GPU
+        if device.type == "cpu":
+            logger.warning("Using CPU locally for compatibility")
+        preload_models()  # No weights_only parameter, as it’s not supported in bark==0.1.5
         logger.info("Bark models preloaded successfully")
     except Exception as e:
-        logger.error("Failed to preload Bark models: %s", str(e))
+        logger.error(f"Failed to preload Bark models: {str(e)}")
         raise
 
 # Uncomment to preload models at startup if desired
@@ -135,7 +132,7 @@ def _use_suno_model(text: str, speaker: str, language: str, random_voice_number:
     """Generate advanced audio using Bark."""
     # Log GPU availability
     if torch.cuda.is_available():
-        logger.info("Using GPU: %s", torch.cuda.get_device_name(0))
+        logger.info(f"Using GPU: {torch.cuda.get_device_name(0)}")
         device = torch.device("cuda")
     else:
         logger.warning("No GPU available, using CPU. Inference might be slow.")
