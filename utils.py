@@ -56,7 +56,7 @@ fw_client = instructor.from_fireworks(fw_client)
 # Initialize Hugging Face client
 hf_client = Client(MELO_TTS_SPACES_ID)
 
-# Preload Bark models with explicit device handling
+# Preload Bark models with explicit device handling and custom loading
 def preload_bark_models():
     """Preload Bark models with GPU support if available."""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -64,7 +64,12 @@ def preload_bark_models():
     try:
         if device.type == "cpu":
             logger.warning("Using CPU locally for compatibility")
-        preload_models()  # No weights_only parameter, as it’s not supported in bark==0.1.5
+            # Explicitly load models with weights_only=False for trusted local source
+            from bark.generation import load_model
+            for model_type in ["text", "coarse", "fine"]:
+                load_model(model_type=model_type, device=device, weights_only=False)
+        else:
+            preload_models()  # Use default behavior on GPU
         logger.info("Bark models preloaded successfully")
     except Exception as e:
         logger.error(f"Failed to preload Bark models: {str(e)}")
